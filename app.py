@@ -1,74 +1,62 @@
 import streamlit as st
 import requests as rq
 
-
+# Function to fetch a random word
+# Converts to uppercase for simpler comparisons
 def get_word():
-    url = "https://random-word-api.herokuapp.com/word"
-    resp = rq.get(url)
+    response = rq.get("https://random-word-api.vercel.app/api?words=1")
+    return response.json()[0].upper() if response.status_code == 200 else "HELLO"
 
-    if resp.status_code == 200:
-        return resp.json()[0]
-    
-    return "Hello"
+# —– Initialize session state —–
+if "word" not in st.session_state:
+    st.session_state.word = get_word()
+    st.session_state.tries = 0                  # Number of wrong attempts
+    st.session_state.correct = {}               # Correct letters {index: letter}
+    st.session_state.guessed = set()            # Letters already tried
 
+# —– Function to process each guess —–
+def guess_letter():
+    # Get the input letter and convert to uppercase
+    letter = st.session_state.letter_guess.upper()
+    # Ignore empty input or repeated guesses
+    if not letter or letter in st.session_state.guessed:
+        return
+    st.session_state.guessed.add(letter)
 
-def gen_cols(word, letter = ""):
-    cols = st.columns(len(word))
-
-    if "correct" not in st.session_state:
-        st.session_state['correct'] = {}
-        correct = {}
-    
+    # If the letter is in the word, reveal all matching positions
+    if letter in st.session_state.word:
+        for idx, char in enumerate(st.session_state.word):
+            if char == letter:
+                st.session_state.correct[idx] = char
     else:
-        correct = st.session_state['correct']
+        # Wrong guess: increment the try counter
+        st.session_state.tries += 1
 
+    # Clear the input field for the next guess
+    st.session_state.letter_guess = ""
 
-    for i, col in enumerate(cols):
-        with col:
-            if correct.get(str(i)):
-                st.text_input(label = str(i), value = correct.get(str(i)), disabled = True)
+# —– App title —–
+st.title("Hangman Game")
 
-            elif word[i] == letter:
-                st.text_input(label = str(i), value = letter, disabled = True)
-                correct[str(i)] = letter
-                st.session_state["fails"] = False
-            else:
-                st.text_input(label = str(i), disabled = True)
-    
-    
-    st.session_state["trys"] += 1
+# —– Display hangman image based on number of wrong attempts —–
+st.image(f"./images/hangman_{st.session_state.tries}.png", width=400)
 
+# —– Form for guessing a letter —–
+with st.form("guess_form", clear_on_submit=True):
+    st.text_input("Enter a letter:", max_chars=1, key="letter_guess")
+    st.form_submit_button("Submit Guess", on_click=guess_letter)
 
-def get_answer(word):
-    cols = st.columns(len(word))
+# —– Draw blanks and reveal correctly guessed letters —–
+cols = st.columns(len(st.session_state.word))
+for idx, char in enumerate(st.session_state.word):
+    with cols[idx]:
+        if idx in st.session_state.correct:
+            st.markdown(f"**{char}**")
+        else:
+            st.markdown("▢")
 
-    for i, letter in enumerate(word):
-        with cols[i]:
-            st.text_input(label = str(i), value = letter, disabled = True)
-
-
-def main(word):
-    st.write(word)
-    if st.session_state["trys"] < 6:
-        letter = st.text_input(label = "choise",value = "", max_chars = 1)
-
-        # st.image(f"./images/hangman_{st.session_state["trys"]}.png", width = 400)
-
-        gen_cols(word, letter)
-
-    else:
-        get_answer(word)
-
-
-
-if __name__ == '__main__':
-    word = get_word()
-    if "word" not in st.session_state:
-        st.session_state["word"] = word
-        st.session_state["trys"] = 0
-    else:
-        word = st.session_state["word"]
-
-    main(word)
-
-
+# —– End-of-game conditions —–
+if st.session_state.tries >= 6:
+    st.error(f"Game Over! The word was **{st.session_state.word}**")
+elif len(st.session_state.correct) == len(st.session_state.word):
+    st.success("🎉 Congratulations, you won!")
